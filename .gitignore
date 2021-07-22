@@ -19,10 +19,10 @@
 /packages/**/out/
 
 # production
-/build
-/packages/**/dist
-/dist
-/packages/**/dist
+# /build
+# /packages/**/dist
+# /dist
+# /packages/**/dist
 
 # misc
 .DS_Store
