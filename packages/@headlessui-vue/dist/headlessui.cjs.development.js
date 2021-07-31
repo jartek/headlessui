@@ -1253,6 +1253,12 @@ function useDisclosureContext(component) {
   }
 
   return context;
+}
+
+var DisclosurePanelContext = /*#__PURE__*/Symbol('DisclosurePanelContext');
+
+function useDisclosurePanelContext() {
+  return vue.inject(DisclosurePanelContext, null);
 } // ---
 
 
@@ -1271,15 +1277,37 @@ var Disclosure = /*#__PURE__*/vue.defineComponent({
   setup: function setup(props, _ref) {
     var slots = _ref.slots,
         attrs = _ref.attrs;
+    var buttonId = "headlessui-disclosure-button-" + useId();
+    var panelId = "headlessui-disclosure-panel-" + useId();
     var disclosureState = vue.ref(props.defaultOpen ? DisclosureStates.Open : DisclosureStates.Closed);
     var panelRef = vue.ref(null);
+    var buttonRef = vue.ref(null);
     var api = {
+      buttonId: buttonId,
+      panelId: panelId,
       disclosureState: disclosureState,
-      panelRef: panelRef,
+      panel: panelRef,
+      button: buttonRef,
       toggleDisclosure: function toggleDisclosure() {
         var _match;
 
         disclosureState.value = match(disclosureState.value, (_match = {}, _match[DisclosureStates.Open] = DisclosureStates.Closed, _match[DisclosureStates.Closed] = DisclosureStates.Open, _match));
+      },
+      closeDisclosure: function closeDisclosure() {
+        if (disclosureState.value === DisclosureStates.Closed) return;
+        disclosureState.value = DisclosureStates.Closed;
+      },
+      close: function close(focusableElement) {
+        api.closeDisclosure();
+
+        var restoreElement = function () {
+          if (!focusableElement) return dom(api.button);
+          if (focusableElement instanceof HTMLElement) return focusableElement;
+          if (focusableElement.value instanceof HTMLElement) return dom(focusableElement);
+          return dom(api.button);
+        }();
+
+        restoreElement == null ? void 0 : restoreElement.focus();
       }
     };
     vue.provide(DisclosureContext, api);
@@ -1292,7 +1320,8 @@ var Disclosure = /*#__PURE__*/vue.defineComponent({
       var passThroughProps = _objectWithoutPropertiesLoose(props, ["defaultOpen"]);
 
       var slot = {
-        open: disclosureState.value === DisclosureStates.Open
+        open: disclosureState.value === DisclosureStates.Open,
+        close: api.close
       };
       return render({
         props: passThroughProps,
@@ -1322,11 +1351,16 @@ var DisclosureButton = /*#__PURE__*/vue.defineComponent({
     var slot = {
       open: api.disclosureState.value === DisclosureStates.Open
     };
-    var propsWeControl = {
+    var propsWeControl = this.isWithinPanel ? {
+      type: 'button',
+      onClick: this.handleClick,
+      onKeydown: this.handleKeyDown
+    } : {
       id: this.id,
+      ref: 'el',
       type: 'button',
       'aria-expanded': this.$props.disabled ? undefined : api.disclosureState.value === DisclosureStates.Open,
-      'aria-controls': this.ariaControls,
+      'aria-controls': dom(api.panel) ? api.panelId : undefined,
       disabled: this.$props.disabled ? true : undefined,
       onClick: this.handleClick,
       onKeydown: this.handleKeyDown,
@@ -1342,29 +1376,48 @@ var DisclosureButton = /*#__PURE__*/vue.defineComponent({
   },
   setup: function setup(props) {
     var api = useDisclosureContext('DisclosureButton');
-    var buttonId = "headlessui-disclosure-button-" + useId();
-    var ariaControls = vue.computed(function () {
-      var _dom$id, _dom;
-
-      return (_dom$id = (_dom = dom(api.panelRef)) == null ? void 0 : _dom.id) != null ? _dom$id : undefined;
-    });
+    var panelContext = useDisclosurePanelContext();
+    var isWithinPanel = panelContext === null ? false : panelContext === api.panelId;
     return {
-      id: buttonId,
-      ariaControls: ariaControls,
+      isWithinPanel: isWithinPanel,
+      id: api.buttonId,
+      el: isWithinPanel ? undefined : api.button,
       handleClick: function handleClick() {
         if (props.disabled) return;
-        api.toggleDisclosure();
+
+        if (isWithinPanel) {
+          var _dom;
+
+          api.toggleDisclosure();
+          (_dom = dom(api.button)) == null ? void 0 : _dom.focus();
+        } else {
+          api.toggleDisclosure();
+        }
       },
       handleKeyDown: function handleKeyDown(event) {
+        var _dom2;
+
         if (props.disabled) return;
 
-        switch (event.key) {
-          case Keys.Space:
-          case Keys.Enter:
-            event.preventDefault();
-            event.stopPropagation();
-            api.toggleDisclosure();
-            break;
+        if (isWithinPanel) {
+          switch (event.key) {
+            case Keys.Space:
+            case Keys.Enter:
+              event.preventDefault();
+              event.stopPropagation();
+              api.toggleDisclosure();
+              (_dom2 = dom(api.button)) == null ? void 0 : _dom2.focus();
+              break;
+          }
+        } else {
+          switch (event.key) {
+            case Keys.Space:
+            case Keys.Enter:
+              event.preventDefault();
+              event.stopPropagation();
+              api.toggleDisclosure();
+              break;
+          }
         }
       },
       handleKeyUp: function handleKeyUp(event) {
@@ -1400,7 +1453,8 @@ var DisclosurePanel = /*#__PURE__*/vue.defineComponent({
   render: function render$1() {
     var api = useDisclosureContext('DisclosurePanel');
     var slot = {
-      open: api.disclosureState.value === DisclosureStates.Open
+      open: api.disclosureState.value === DisclosureStates.Open,
+      close: api.close
     };
     var propsWeControl = {
       id: this.id,
@@ -1418,7 +1472,7 @@ var DisclosurePanel = /*#__PURE__*/vue.defineComponent({
   },
   setup: function setup() {
     var api = useDisclosureContext('DisclosurePanel');
-    var panelId = "headlessui-disclosure-panel-" + useId();
+    vue.provide(DisclosurePanelContext, api.panelId);
     var usesOpenClosedState = useOpenClosed();
     var visible = vue.computed(function () {
       if (usesOpenClosedState !== null) {
@@ -1428,8 +1482,8 @@ var DisclosurePanel = /*#__PURE__*/vue.defineComponent({
       return api.disclosureState.value === DisclosureStates.Open;
     });
     return {
-      id: panelId,
-      el: api.panelRef,
+      id: api.panelId,
+      el: api.panel,
       visible: visible
     };
   }
@@ -1608,6 +1662,10 @@ var Listbox = /*#__PURE__*/vue.defineComponent({
       type: [Boolean],
       "default": false
     },
+    horizontal: {
+      type: [Boolean],
+      "default": false
+    },
     modelValue: {
       type: [Object, String, Number, Boolean]
     }
@@ -1629,6 +1687,9 @@ var Listbox = /*#__PURE__*/vue.defineComponent({
     var api = {
       listboxState: listboxState,
       value: value,
+      orientation: vue.computed(function () {
+        return props.horizontal ? 'horizontal' : 'vertical';
+      }),
       labelRef: labelRef,
       buttonRef: buttonRef,
       optionsRef: optionsRef,
@@ -1747,7 +1808,7 @@ var Listbox = /*#__PURE__*/vue.defineComponent({
         disabled: props.disabled
       };
       return render({
-        props: omit(props, ['modelValue', 'onUpdate:modelValue', 'disabled']),
+        props: omit(props, ['modelValue', 'onUpdate:modelValue', 'disabled', 'horizontal']),
         slot: slot,
         slots: slots,
         attrs: attrs,
@@ -1947,6 +2008,7 @@ var ListboxOptions = /*#__PURE__*/vue.defineComponent({
     var propsWeControl = {
       'aria-activedescendant': api.activeOptionIndex.value === null ? undefined : (_api$options$value$ap = api.options.value[api.activeOptionIndex.value]) == null ? void 0 : _api$options$value$ap.id,
       'aria-labelledby': (_dom$id = (_dom11 = dom(api.labelRef)) == null ? void 0 : _dom11.id) != null ? _dom$id : (_dom12 = dom(api.buttonRef)) == null ? void 0 : _dom12.id,
+      'aria-orientation': api.orientation.value,
       id: this.id,
       onKeydown: this.handleKeyDown,
       role: 'listbox',
@@ -2003,12 +2065,18 @@ var ListboxOptions = /*#__PURE__*/vue.defineComponent({
           });
           break;
 
-        case Keys.ArrowDown:
+        case match(api.orientation.value, {
+          vertical: Keys.ArrowDown,
+          horizontal: Keys.ArrowRight
+        }):
           event.preventDefault();
           event.stopPropagation();
           return api.goToOption(Focus$1.Next);
 
-        case Keys.ArrowUp:
+        case match(api.orientation.value, {
+          vertical: Keys.ArrowUp,
+          horizontal: Keys.ArrowLeft
+        }):
           event.preventDefault();
           event.stopPropagation();
           return api.goToOption(Focus$1.Previous);
@@ -2849,6 +2917,18 @@ var Popover = /*#__PURE__*/vue.defineComponent({
       closePopover: function closePopover() {
         if (popoverState.value === PopoverStates.Closed) return;
         popoverState.value = PopoverStates.Closed;
+      },
+      close: function close(focusableElement) {
+        api.closePopover();
+
+        var restoreElement = function () {
+          if (!focusableElement) return dom(api.button);
+          if (focusableElement instanceof HTMLElement) return focusableElement;
+          if (focusableElement.value instanceof HTMLElement) return dom(focusableElement);
+          return dom(api.button);
+        }();
+
+        restoreElement == null ? void 0 : restoreElement.focus();
       }
     };
     vue.provide(PopoverContext, api);
@@ -2903,7 +2983,8 @@ var Popover = /*#__PURE__*/vue.defineComponent({
     });
     return function () {
       var slot = {
-        open: popoverState.value === PopoverStates.Open
+        open: popoverState.value === PopoverStates.Open,
+        close: api.close
       };
       return render({
         props: props,
@@ -3171,7 +3252,8 @@ var PopoverPanel = /*#__PURE__*/vue.defineComponent({
   render: function render$1() {
     var api = usePopoverContext('PopoverPanel');
     var slot = {
-      open: api.popoverState.value === PopoverStates.Open
+      open: api.popoverState.value === PopoverStates.Open,
+      close: api.close
     };
     var propsWeControl = {
       ref: 'el',
@@ -3912,6 +3994,376 @@ var Switch = /*#__PURE__*/vue.defineComponent({
 var SwitchLabel = Label;
 var SwitchDescription = Description;
 
+var TabsContext = /*#__PURE__*/Symbol('TabsContext');
+
+function useTabsContext(component) {
+  var context = vue.inject(TabsContext, null);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <TabGroup /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, useTabsContext);
+    throw err;
+  }
+
+  return context;
+} // ---
+
+
+var TabGroup = /*#__PURE__*/vue.defineComponent({
+  name: 'TabGroup',
+  emits: ['change'],
+  props: {
+    as: {
+      type: [Object, String],
+      "default": 'template'
+    },
+    defaultIndex: {
+      type: [Number],
+      "default": 0
+    },
+    vertical: {
+      type: [Boolean],
+      "default": false
+    },
+    manual: {
+      type: [Boolean],
+      "default": false
+    }
+  },
+  setup: function setup(props, _ref) {
+    var slots = _ref.slots,
+        attrs = _ref.attrs,
+        emit = _ref.emit;
+    var selectedIndex = vue.ref(null);
+    var tabs = vue.ref([]);
+    var panels = vue.ref([]);
+    var api = {
+      selectedIndex: selectedIndex,
+      orientation: vue.computed(function () {
+        return props.vertical ? 'vertical' : 'horizontal';
+      }),
+      activation: vue.computed(function () {
+        return props.manual ? 'manual' : 'auto';
+      }),
+      tabs: tabs,
+      panels: panels,
+      setSelectedIndex: function setSelectedIndex(index) {
+        if (selectedIndex.value === index) return;
+        selectedIndex.value = index;
+        emit('change', index);
+      },
+      registerTab: function registerTab(tab) {
+        if (!tabs.value.includes(tab)) tabs.value.push(tab);
+      },
+      unregisterTab: function unregisterTab(tab) {
+        var idx = tabs.value.indexOf(tab);
+        if (idx !== -1) tabs.value.slice(idx, 1);
+      },
+      registerPanel: function registerPanel(panel) {
+        if (!panels.value.includes(panel)) panels.value.push(panel);
+      },
+      unregisterPanel: function unregisterPanel(panel) {
+        var idx = panels.value.indexOf(panel);
+        if (idx !== -1) panels.value.slice(idx, 1);
+      }
+    };
+    vue.provide(TabsContext, api);
+    vue.onMounted(function () {
+      if (api.tabs.value.length <= 0) return console.log('bail');
+      if (selectedIndex.value !== null) return console.log('bail 2');
+      var tabs = api.tabs.value.map(function (tab) {
+        return dom(tab);
+      }).filter(Boolean);
+      var focusableTabs = tabs.filter(function (tab) {
+        return !tab.hasAttribute('disabled');
+      }); // Underflow
+
+      if (props.defaultIndex < 0) {
+        selectedIndex.value = tabs.indexOf(focusableTabs[0]);
+      } // Overflow
+      else if (props.defaultIndex > api.tabs.value.length) {
+          selectedIndex.value = tabs.indexOf(focusableTabs[focusableTabs.length - 1]);
+        } // Middle
+        else {
+            var before = tabs.slice(0, props.defaultIndex);
+            var after = tabs.slice(props.defaultIndex);
+            var next = [].concat(after, before).find(function (tab) {
+              return focusableTabs.includes(tab);
+            });
+            if (!next) return;
+            selectedIndex.value = tabs.indexOf(next);
+          }
+    });
+    return function () {
+      var slot = {
+        selectedIndex: selectedIndex.value
+      };
+      return render({
+        props: omit(props, ['defaultIndex', 'manual', 'vertical']),
+        slot: slot,
+        slots: slots,
+        attrs: attrs,
+        name: 'TabGroup'
+      });
+    };
+  }
+}); // ---
+
+var TabList = /*#__PURE__*/vue.defineComponent({
+  name: 'TabList',
+  props: {
+    as: {
+      type: [Object, String],
+      "default": 'div'
+    }
+  },
+  setup: function setup(props, _ref2) {
+    var attrs = _ref2.attrs,
+        slots = _ref2.slots;
+    var api = useTabsContext('TabList');
+    return function () {
+      var slot = {
+        selectedIndex: api.selectedIndex.value
+      };
+      var propsWeControl = {
+        role: 'tablist',
+        'aria-orientation': api.orientation.value
+      };
+      var passThroughProps = props;
+      return render({
+        props: _extends({}, passThroughProps, propsWeControl),
+        slot: slot,
+        attrs: attrs,
+        slots: slots,
+        name: 'TabList'
+      });
+    };
+  }
+}); // ---
+
+var Tab = /*#__PURE__*/vue.defineComponent({
+  name: 'Tab',
+  props: {
+    as: {
+      type: [Object, String],
+      "default": 'button'
+    },
+    disabled: {
+      type: [Boolean],
+      "default": false
+    }
+  },
+  render: function render$1() {
+    var _api$panels$value$thi, _api$panels$value$thi2;
+
+    var api = useTabsContext('Tab');
+    var slot = {
+      selected: this.selected
+    };
+    var propsWeControl = {
+      ref: 'el',
+      onKeydown: this.handleKeyDown,
+      onFocus: api.activation.value === 'manual' ? this.handleFocus : this.handleSelection,
+      onClick: this.handleSelection,
+      id: this.id,
+      role: 'tab',
+      type: this.type,
+      'aria-controls': (_api$panels$value$thi = api.panels.value[this.myIndex]) == null ? void 0 : (_api$panels$value$thi2 = _api$panels$value$thi.value) == null ? void 0 : _api$panels$value$thi2.id,
+      'aria-selected': this.selected,
+      tabIndex: this.selected ? 0 : -1,
+      disabled: this.$props.disabled ? true : undefined
+    };
+
+    return render({
+      props: _extends({}, this.$props, propsWeControl),
+      slot: slot,
+      attrs: this.$attrs,
+      slots: this.$slots,
+      name: 'Tab'
+    });
+  },
+  setup: function setup(props, _ref3) {
+    var attrs = _ref3.attrs;
+    var api = useTabsContext('Tab');
+    var id = "headlessui-tabs-tab-" + useId();
+    var tabRef = vue.ref();
+    vue.onMounted(function () {
+      return api.registerTab(tabRef);
+    });
+    vue.onUnmounted(function () {
+      return api.unregisterTab(tabRef);
+    });
+    var myIndex = vue.computed(function () {
+      return api.tabs.value.indexOf(tabRef);
+    });
+    var selected = vue.computed(function () {
+      return myIndex.value === api.selectedIndex.value;
+    });
+    var type = vue.computed(function () {
+      var _attrs$type;
+
+      return (_attrs$type = attrs.type) != null ? _attrs$type : props.as === 'button' ? 'button' : undefined;
+    });
+
+    function handleKeyDown(event) {
+      var list = api.tabs.value.map(function (tab) {
+        return dom(tab);
+      }).filter(Boolean);
+
+      if (event.key === Keys.Space || event.key === Keys.Enter) {
+        event.preventDefault();
+        event.stopPropagation();
+        api.setSelectedIndex(myIndex.value);
+        return;
+      }
+
+      switch (event.key) {
+        case Keys.Home:
+        case Keys.PageUp:
+          event.preventDefault();
+          event.stopPropagation();
+          return focusIn(list, Focus.First);
+
+        case Keys.End:
+        case Keys.PageDown:
+          event.preventDefault();
+          event.stopPropagation();
+          return focusIn(list, Focus.Last);
+      }
+
+      return match(api.orientation.value, {
+        vertical: function vertical() {
+          if (event.key === Keys.ArrowUp) return focusIn(list, Focus.Previous | Focus.WrapAround);
+          if (event.key === Keys.ArrowDown) return focusIn(list, Focus.Next | Focus.WrapAround);
+          return;
+        },
+        horizontal: function horizontal() {
+          if (event.key === Keys.ArrowLeft) return focusIn(list, Focus.Previous | Focus.WrapAround);
+          if (event.key === Keys.ArrowRight) return focusIn(list, Focus.Next | Focus.WrapAround);
+          return;
+        }
+      });
+    }
+
+    function handleFocus() {
+      var _dom;
+
+      (_dom = dom(tabRef)) == null ? void 0 : _dom.focus();
+    }
+
+    function handleSelection() {
+      var _dom2;
+
+      if (props.disabled) return;
+      (_dom2 = dom(tabRef)) == null ? void 0 : _dom2.focus();
+      api.setSelectedIndex(myIndex.value);
+    }
+
+    return {
+      el: tabRef,
+      id: id,
+      selected: selected,
+      myIndex: myIndex,
+      type: type,
+      handleKeyDown: handleKeyDown,
+      handleFocus: handleFocus,
+      handleSelection: handleSelection
+    };
+  }
+}); // ---
+
+var TabPanels = /*#__PURE__*/vue.defineComponent({
+  name: 'TabPanels',
+  props: {
+    as: {
+      type: [Object, String],
+      "default": 'div'
+    }
+  },
+  setup: function setup(props, _ref4) {
+    var slots = _ref4.slots,
+        attrs = _ref4.attrs;
+    var api = useTabsContext('TabPanels');
+    return function () {
+      var slot = {
+        selectedIndex: api.selectedIndex.value
+      };
+      return render({
+        props: props,
+        slot: slot,
+        attrs: attrs,
+        slots: slots,
+        name: 'TabPanels'
+      });
+    };
+  }
+});
+var TabPanel = /*#__PURE__*/vue.defineComponent({
+  name: 'TabPanel',
+  props: {
+    as: {
+      type: [Object, String],
+      "default": 'div'
+    },
+    "static": {
+      type: Boolean,
+      "default": false
+    },
+    unmount: {
+      type: Boolean,
+      "default": true
+    }
+  },
+  render: function render$1() {
+    var _api$tabs$value$this$, _api$tabs$value$this$2;
+
+    var api = useTabsContext('TabPanel');
+    var slot = {
+      selected: this.selected
+    };
+    var propsWeControl = {
+      ref: 'el',
+      id: this.id,
+      role: 'tabpanel',
+      'aria-labelledby': (_api$tabs$value$this$ = api.tabs.value[this.myIndex]) == null ? void 0 : (_api$tabs$value$this$2 = _api$tabs$value$this$.value) == null ? void 0 : _api$tabs$value$this$2.id,
+      tabIndex: this.selected ? 0 : -1
+    };
+
+    return render({
+      props: _extends({}, this.$props, propsWeControl),
+      slot: slot,
+      attrs: this.$attrs,
+      slots: this.$slots,
+      features: Features.Static | Features.RenderStrategy,
+      visible: this.selected,
+      name: 'TabPanel'
+    });
+  },
+  setup: function setup() {
+    var api = useTabsContext('TabPanel');
+    var id = "headlessui-tabs-panel-" + useId();
+    var panelRef = vue.ref();
+    vue.onMounted(function () {
+      return api.registerPanel(panelRef);
+    });
+    vue.onUnmounted(function () {
+      return api.unregisterPanel(panelRef);
+    });
+    var myIndex = vue.computed(function () {
+      return api.panels.value.indexOf(panelRef);
+    });
+    var selected = vue.computed(function () {
+      return myIndex.value === api.selectedIndex.value;
+    });
+    return {
+      id: id,
+      el: panelRef,
+      selected: selected,
+      myIndex: myIndex
+    };
+  }
+});
+
 function once(cb) {
   var state = {
     called: false
@@ -4582,6 +5034,11 @@ exports.Switch = Switch;
 exports.SwitchDescription = SwitchDescription;
 exports.SwitchGroup = SwitchGroup;
 exports.SwitchLabel = SwitchLabel;
+exports.Tab = Tab;
+exports.TabGroup = TabGroup;
+exports.TabList = TabList;
+exports.TabPanel = TabPanel;
+exports.TabPanels = TabPanels;
 exports.TransitionChild = TransitionChild;
 exports.TransitionRoot = TransitionRoot;
 //# sourceMappingURL=headlessui.cjs.development.js.map

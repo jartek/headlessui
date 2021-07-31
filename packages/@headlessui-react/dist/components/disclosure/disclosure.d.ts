@@ -1,10 +1,11 @@
-import React, { ElementType } from 'react';
+import React, { ElementType, MutableRefObject } from 'react';
 import { Props } from '../../types';
 declare let DEFAULT_DISCLOSURE_TAG: React.ExoticComponent<{
     children?: React.ReactNode;
 }>;
 interface DisclosureRenderPropArg {
     open: boolean;
+    close(focusableElement?: HTMLElement | MutableRefObject<HTMLElement | null>): void;
 }
 export declare function Disclosure<TTag extends ElementType = typeof DEFAULT_DISCLOSURE_TAG>(props: Props<TTag, DisclosureRenderPropArg> & {
     defaultOpen?: boolean;
@@ -37,7 +38,7 @@ export declare namespace Disclosure {
         unmount?: undefined;
     } & {
         static?: boolean | undefined;
-    }), ref: React.Ref<HTMLDivElement>) => React.ReactElement<any, string | ((props: any) => React.ReactElement<any, string | any | (new (props: any) => React.Component<any, any, any>)> | null) | (new (props: any) => React.Component<any, any, any>)> | null) & {
+    }), ref: React.Ref<HTMLDivElement>) => JSX.Element) & {
         displayName: string;
     };
 }
@@ -47,5 +48,6 @@ interface ButtonRenderPropArg {
 declare type ButtonPropsWeControl = 'id' | 'type' | 'aria-expanded' | 'aria-controls' | 'onKeyDown' | 'onClick';
 interface PanelRenderPropArg {
     open: boolean;
+    close: (focusableElement?: HTMLElement | MutableRefObject<HTMLElement | null>) => void;
 }
 export {};

@@ -8,6 +8,10 @@ export declare let Listbox: import("vue").DefineComponent<{
         type: BooleanConstructor[];
         default: boolean;
     };
+    horizontal: {
+        type: BooleanConstructor[];
+        default: boolean;
+    };
     modelValue: {
         type: (ObjectConstructor | StringConstructor | BooleanConstructor | NumberConstructor)[];
     };
@@ -16,11 +20,13 @@ export declare let Listbox: import("vue").DefineComponent<{
 }> | import("vue").VNode<import("vue").RendererNode, import("vue").RendererElement, {
     [key: string]: any;
 }>[] | null | undefined, unknown, {}, {}, import("vue").ComponentOptionsMixin, import("vue").ComponentOptionsMixin, "update:modelValue"[], "update:modelValue", import("vue").VNodeProps & import("vue").AllowedComponentProps & import("vue").ComponentCustomProps, Readonly<{
+    horizontal: boolean;
     as: string;
     disabled: boolean;
 } & {
     modelValue?: unknown;
 }>, {
+    horizontal: boolean;
     as: string;
     disabled: boolean;
 }>;

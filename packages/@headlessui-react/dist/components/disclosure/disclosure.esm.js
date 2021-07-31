@@ -1,5 +1,5 @@
 import { extends as _extends, objectWithoutPropertiesLoose as _objectWithoutPropertiesLoose } from '../../_virtual/_rollupPluginBabelHelpers.js';
-import React, { useReducer, useEffect, useMemo, createContext, useCallback, useContext, Fragment } from 'react';
+import React, { useReducer, useEffect, useCallback, useMemo, createContext, useContext, Fragment } from 'react';
 import { match } from '../../utils/match.esm.js';
 import { render, forwardRefWithAs, Features } from '../../utils/render.esm.js';
 import { useSyncRefs } from '../../hooks/use-sync-refs.esm.js';
@@ -20,10 +20,11 @@ var ActionTypes;
 
 (function (ActionTypes) {
   ActionTypes[ActionTypes["ToggleDisclosure"] = 0] = "ToggleDisclosure";
-  ActionTypes[ActionTypes["SetButtonId"] = 1] = "SetButtonId";
-  ActionTypes[ActionTypes["SetPanelId"] = 2] = "SetPanelId";
-  ActionTypes[ActionTypes["LinkPanel"] = 3] = "LinkPanel";
-  ActionTypes[ActionTypes["UnlinkPanel"] = 4] = "UnlinkPanel";
+  ActionTypes[ActionTypes["CloseDisclosure"] = 1] = "CloseDisclosure";
+  ActionTypes[ActionTypes["SetButtonId"] = 2] = "SetButtonId";
+  ActionTypes[ActionTypes["SetPanelId"] = 3] = "SetPanelId";
+  ActionTypes[ActionTypes["LinkPanel"] = 4] = "LinkPanel";
+  ActionTypes[ActionTypes["UnlinkPanel"] = 5] = "UnlinkPanel";
 })(ActionTypes || (ActionTypes = {}));
 
 var reducers = (_reducers = {}, _reducers[ActionTypes.ToggleDisclosure] = function (state) {
@@ -31,6 +32,11 @@ var reducers = (_reducers = {}, _reducers[ActionTypes.ToggleDisclosure] = functi
 
   return _extends({}, state, {
     disclosureState: match(state.disclosureState, (_match = {}, _match[DisclosureStates.Open] = DisclosureStates.Closed, _match[DisclosureStates.Closed] = DisclosureStates.Open, _match))
+  });
+}, _reducers[ActionTypes.CloseDisclosure] = function (state) {
+  if (state.disclosureState === DisclosureStates.Closed) return state;
+  return _extends({}, state, {
+    disclosureState: DisclosureStates.Closed
   });
 }, _reducers[ActionTypes.LinkPanel] = function (state) {
   if (state.linkedPanel === true) return state;
@@ -68,6 +74,28 @@ function useDisclosureContext(component) {
   return context;
 }
 
+var DisclosureAPIContext = /*#__PURE__*/createContext(null);
+DisclosureAPIContext.displayName = 'DisclosureAPIContext';
+
+function useDisclosureAPIContext(component) {
+  var context = useContext(DisclosureAPIContext);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <" + Disclosure.name + " /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, useDisclosureAPIContext);
+    throw err;
+  }
+
+  return context;
+}
+
+var DisclosurePanelContext = /*#__PURE__*/createContext(null);
+DisclosurePanelContext.displayName = 'DisclosurePanelContext';
+
+function useDisclosurePanelContext() {
+  return useContext(DisclosurePanelContext);
+}
+
 function stateReducer(state, action) {
   return match(action.type, reducers, state, action);
 } // ---
@@ -103,13 +131,35 @@ function Disclosure(props) {
       panelId: panelId
     });
   }, [panelId, dispatch]);
+  var close = useCallback(function (focusableElement) {
+    dispatch({
+      type: ActionTypes.CloseDisclosure
+    });
+
+    var restoreElement = function () {
+      if (!focusableElement) return document.getElementById(buttonId);
+      if (focusableElement instanceof HTMLElement) return focusableElement;
+      if (focusableElement.current instanceof HTMLElement) return focusableElement.current;
+      return document.getElementById(buttonId);
+    }();
+
+    restoreElement == null ? void 0 : restoreElement.focus();
+  }, [dispatch, buttonId]);
+  var api = useMemo(function () {
+    return {
+      close: close
+    };
+  }, [close]);
   var slot = useMemo(function () {
     return {
-      open: disclosureState === DisclosureStates.Open
+      open: disclosureState === DisclosureStates.Open,
+      close: close
     };
-  }, [disclosureState]);
+  }, [disclosureState, close]);
   return React.createElement(DisclosureContext.Provider, {
     value: reducerBag
+  }, React.createElement(DisclosureAPIContext.Provider, {
+    value: api
   }, React.createElement(OpenClosedProvider, {
     value: match(disclosureState, (_match2 = {}, _match2[DisclosureStates.Open] = State.Open, _match2[DisclosureStates.Closed] = State.Closed, _match2))
   }, render({
@@ -117,7 +167,7 @@ function Disclosure(props) {
     slot: slot,
     defaultTag: DEFAULT_DISCLOSURE_TAG,
     name: 'Disclosure'
-  })));
+  }))));
 } // ---
 
 var DEFAULT_BUTTON_TAG = 'button';
@@ -127,18 +177,38 @@ var Button = /*#__PURE__*/forwardRefWithAs(function Button(props, ref) {
       dispatch = _useDisclosureContext[1];
 
   var buttonRef = useSyncRefs(ref);
+  var panelContext = useDisclosurePanelContext();
+  var isWithinPanel = panelContext === null ? false : panelContext === state.panelId;
   var handleKeyDown = useCallback(function (event) {
-    switch (event.key) {
-      case Keys.Space:
-      case Keys.Enter:
-        event.preventDefault();
-        event.stopPropagation();
-        dispatch({
-          type: ActionTypes.ToggleDisclosure
-        });
-        break;
+    var _document$getElementB;
+
+    if (isWithinPanel) {
+      if (state.disclosureState === DisclosureStates.Closed) return;
+
+      switch (event.key) {
+        case Keys.Space:
+        case Keys.Enter:
+          event.preventDefault();
+          event.stopPropagation();
+          dispatch({
+            type: ActionTypes.ToggleDisclosure
+          });
+          (_document$getElementB = document.getElementById(state.buttonId)) == null ? void 0 : _document$getElementB.focus();
+          break;
+      }
+    } else {
+      switch (event.key) {
+        case Keys.Space:
+        case Keys.Enter:
+          event.preventDefault();
+          event.stopPropagation();
+          dispatch({
+            type: ActionTypes.ToggleDisclosure
+          });
+          break;
+      }
     }
-  }, [dispatch]);
+  }, [dispatch, isWithinPanel, state.disclosureState]);
   var handleKeyUp = useCallback(function (event) {
     switch (event.key) {
       case Keys.Space:
@@ -152,17 +222,31 @@ var Button = /*#__PURE__*/forwardRefWithAs(function Button(props, ref) {
   var handleClick = useCallback(function (event) {
     if (isDisabledReactIssue7711(event.currentTarget)) return;
     if (props.disabled) return;
-    dispatch({
-      type: ActionTypes.ToggleDisclosure
-    });
-  }, [dispatch, props.disabled]);
+
+    if (isWithinPanel) {
+      var _document$getElementB2;
+
+      dispatch({
+        type: ActionTypes.ToggleDisclosure
+      });
+      (_document$getElementB2 = document.getElementById(state.buttonId)) == null ? void 0 : _document$getElementB2.focus();
+    } else {
+      dispatch({
+        type: ActionTypes.ToggleDisclosure
+      });
+    }
+  }, [dispatch, props.disabled, state.buttonId, isWithinPanel]);
   var slot = useMemo(function () {
     return {
       open: state.disclosureState === DisclosureStates.Open
     };
   }, [state]);
   var passthroughProps = props;
-  var propsWeControl = {
+  var propsWeControl = isWithinPanel ? {
+    type: 'button',
+    onKeyDown: handleKeyDown,
+    onClick: handleClick
+  } : {
     ref: buttonRef,
     id: state.buttonId,
     type: 'button',
@@ -186,6 +270,9 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   var _useDisclosureContext2 = useDisclosureContext([Disclosure.name, Panel.name].join('.')),
       state = _useDisclosureContext2[0],
       dispatch = _useDisclosureContext2[1];
+
+  var _useDisclosureAPICont = useDisclosureAPIContext([Disclosure.name, Panel.name].join('.')),
+      close = _useDisclosureAPICont.close;
 
   var panelRef = useSyncRefs(ref, function () {
     if (state.linkedPanel) return;
@@ -223,22 +310,25 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   }, [state.disclosureState, props.unmount, dispatch]);
   var slot = useMemo(function () {
     return {
-      open: state.disclosureState === DisclosureStates.Open
+      open: state.disclosureState === DisclosureStates.Open,
+      close: close
     };
-  }, [state]);
+  }, [state, close]);
   var propsWeControl = {
     ref: panelRef,
     id: state.panelId
   };
   var passthroughProps = props;
-  return render({
+  return React.createElement(DisclosurePanelContext.Provider, {
+    value: state.panelId
+  }, render({
     props: _extends({}, passthroughProps, propsWeControl),
     slot: slot,
     defaultTag: DEFAULT_PANEL_TAG,
     features: PanelRenderFeatures,
     visible: visible,
     name: 'Disclosure.Panel'
-  });
+  }));
 }); // ---
 
 Disclosure.Button = Button;

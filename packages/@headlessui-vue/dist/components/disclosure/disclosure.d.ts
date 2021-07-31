@@ -29,8 +29,9 @@ export declare let DisclosureButton: import("vue").DefineComponent<{
         default: boolean;
     };
 }, {
+    isWithinPanel: boolean;
     id: string;
-    ariaControls: import("vue").ComputedRef<string | undefined>;
+    el: Ref<HTMLButtonElement | null> | undefined;
     handleClick(): void;
     handleKeyDown(event: KeyboardEvent): void;
     handleKeyUp(event: KeyboardEvent): void;

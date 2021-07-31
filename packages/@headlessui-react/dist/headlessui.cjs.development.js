@@ -1365,10 +1365,11 @@ var ActionTypes$1;
 
 (function (ActionTypes) {
   ActionTypes[ActionTypes["ToggleDisclosure"] = 0] = "ToggleDisclosure";
-  ActionTypes[ActionTypes["SetButtonId"] = 1] = "SetButtonId";
-  ActionTypes[ActionTypes["SetPanelId"] = 2] = "SetPanelId";
-  ActionTypes[ActionTypes["LinkPanel"] = 3] = "LinkPanel";
-  ActionTypes[ActionTypes["UnlinkPanel"] = 4] = "UnlinkPanel";
+  ActionTypes[ActionTypes["CloseDisclosure"] = 1] = "CloseDisclosure";
+  ActionTypes[ActionTypes["SetButtonId"] = 2] = "SetButtonId";
+  ActionTypes[ActionTypes["SetPanelId"] = 3] = "SetPanelId";
+  ActionTypes[ActionTypes["LinkPanel"] = 4] = "LinkPanel";
+  ActionTypes[ActionTypes["UnlinkPanel"] = 5] = "UnlinkPanel";
 })(ActionTypes$1 || (ActionTypes$1 = {}));
 
 var reducers$1 = (_reducers$1 = {}, _reducers$1[ActionTypes$1.ToggleDisclosure] = function (state) {
@@ -1376,6 +1377,11 @@ var reducers$1 = (_reducers$1 = {}, _reducers$1[ActionTypes$1.ToggleDisclosure] 
 
   return _extends({}, state, {
     disclosureState: match(state.disclosureState, (_match = {}, _match[DisclosureStates.Open] = DisclosureStates.Closed, _match[DisclosureStates.Closed] = DisclosureStates.Open, _match))
+  });
+}, _reducers$1[ActionTypes$1.CloseDisclosure] = function (state) {
+  if (state.disclosureState === DisclosureStates.Closed) return state;
+  return _extends({}, state, {
+    disclosureState: DisclosureStates.Closed
   });
 }, _reducers$1[ActionTypes$1.LinkPanel] = function (state) {
   if (state.linkedPanel === true) return state;
@@ -1413,6 +1419,28 @@ function useDisclosureContext(component) {
   return context;
 }
 
+var DisclosureAPIContext = /*#__PURE__*/React.createContext(null);
+DisclosureAPIContext.displayName = 'DisclosureAPIContext';
+
+function useDisclosureAPIContext(component) {
+  var context = React.useContext(DisclosureAPIContext);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <" + Disclosure.name + " /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, useDisclosureAPIContext);
+    throw err;
+  }
+
+  return context;
+}
+
+var DisclosurePanelContext = /*#__PURE__*/React.createContext(null);
+DisclosurePanelContext.displayName = 'DisclosurePanelContext';
+
+function useDisclosurePanelContext() {
+  return React.useContext(DisclosurePanelContext);
+}
+
 function stateReducer$1(state, action) {
   return match(action.type, reducers$1, state, action);
 } // ---
@@ -1448,13 +1476,35 @@ function Disclosure(props) {
       panelId: panelId
     });
   }, [panelId, dispatch]);
+  var close = React.useCallback(function (focusableElement) {
+    dispatch({
+      type: ActionTypes$1.CloseDisclosure
+    });
+
+    var restoreElement = function () {
+      if (!focusableElement) return document.getElementById(buttonId);
+      if (focusableElement instanceof HTMLElement) return focusableElement;
+      if (focusableElement.current instanceof HTMLElement) return focusableElement.current;
+      return document.getElementById(buttonId);
+    }();
+
+    restoreElement == null ? void 0 : restoreElement.focus();
+  }, [dispatch, buttonId]);
+  var api = React.useMemo(function () {
+    return {
+      close: close
+    };
+  }, [close]);
   var slot = React.useMemo(function () {
     return {
-      open: disclosureState === DisclosureStates.Open
+      open: disclosureState === DisclosureStates.Open,
+      close: close
     };
-  }, [disclosureState]);
+  }, [disclosureState, close]);
   return React__default.createElement(DisclosureContext.Provider, {
     value: reducerBag
+  }, React__default.createElement(DisclosureAPIContext.Provider, {
+    value: api
   }, React__default.createElement(OpenClosedProvider, {
     value: match(disclosureState, (_match2 = {}, _match2[DisclosureStates.Open] = State.Open, _match2[DisclosureStates.Closed] = State.Closed, _match2))
   }, render({
@@ -1462,7 +1512,7 @@ function Disclosure(props) {
     slot: slot,
     defaultTag: DEFAULT_DISCLOSURE_TAG,
     name: 'Disclosure'
-  })));
+  }))));
 } // ---
 
 var DEFAULT_BUTTON_TAG = 'button';
@@ -1472,18 +1522,38 @@ var Button = /*#__PURE__*/forwardRefWithAs(function Button(props, ref) {
       dispatch = _useDisclosureContext[1];
 
   var buttonRef = useSyncRefs(ref);
+  var panelContext = useDisclosurePanelContext();
+  var isWithinPanel = panelContext === null ? false : panelContext === state.panelId;
   var handleKeyDown = React.useCallback(function (event) {
-    switch (event.key) {
-      case Keys.Space:
-      case Keys.Enter:
-        event.preventDefault();
-        event.stopPropagation();
-        dispatch({
-          type: ActionTypes$1.ToggleDisclosure
-        });
-        break;
+    var _document$getElementB;
+
+    if (isWithinPanel) {
+      if (state.disclosureState === DisclosureStates.Closed) return;
+
+      switch (event.key) {
+        case Keys.Space:
+        case Keys.Enter:
+          event.preventDefault();
+          event.stopPropagation();
+          dispatch({
+            type: ActionTypes$1.ToggleDisclosure
+          });
+          (_document$getElementB = document.getElementById(state.buttonId)) == null ? void 0 : _document$getElementB.focus();
+          break;
+      }
+    } else {
+      switch (event.key) {
+        case Keys.Space:
+        case Keys.Enter:
+          event.preventDefault();
+          event.stopPropagation();
+          dispatch({
+            type: ActionTypes$1.ToggleDisclosure
+          });
+          break;
+      }
     }
-  }, [dispatch]);
+  }, [dispatch, isWithinPanel, state.disclosureState]);
   var handleKeyUp = React.useCallback(function (event) {
     switch (event.key) {
       case Keys.Space:
@@ -1497,17 +1567,31 @@ var Button = /*#__PURE__*/forwardRefWithAs(function Button(props, ref) {
   var handleClick = React.useCallback(function (event) {
     if (isDisabledReactIssue7711(event.currentTarget)) return;
     if (props.disabled) return;
-    dispatch({
-      type: ActionTypes$1.ToggleDisclosure
-    });
-  }, [dispatch, props.disabled]);
+
+    if (isWithinPanel) {
+      var _document$getElementB2;
+
+      dispatch({
+        type: ActionTypes$1.ToggleDisclosure
+      });
+      (_document$getElementB2 = document.getElementById(state.buttonId)) == null ? void 0 : _document$getElementB2.focus();
+    } else {
+      dispatch({
+        type: ActionTypes$1.ToggleDisclosure
+      });
+    }
+  }, [dispatch, props.disabled, state.buttonId, isWithinPanel]);
   var slot = React.useMemo(function () {
     return {
       open: state.disclosureState === DisclosureStates.Open
     };
   }, [state]);
   var passthroughProps = props;
-  var propsWeControl = {
+  var propsWeControl = isWithinPanel ? {
+    type: 'button',
+    onKeyDown: handleKeyDown,
+    onClick: handleClick
+  } : {
     ref: buttonRef,
     id: state.buttonId,
     type: 'button',
@@ -1531,6 +1615,9 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   var _useDisclosureContext2 = useDisclosureContext([Disclosure.name, Panel.name].join('.')),
       state = _useDisclosureContext2[0],
       dispatch = _useDisclosureContext2[1];
+
+  var _useDisclosureAPICont = useDisclosureAPIContext([Disclosure.name, Panel.name].join('.')),
+      close = _useDisclosureAPICont.close;
 
   var panelRef = useSyncRefs(ref, function () {
     if (state.linkedPanel) return;
@@ -1568,22 +1655,25 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   }, [state.disclosureState, props.unmount, dispatch]);
   var slot = React.useMemo(function () {
     return {
-      open: state.disclosureState === DisclosureStates.Open
+      open: state.disclosureState === DisclosureStates.Open,
+      close: close
     };
-  }, [state]);
+  }, [state, close]);
   var propsWeControl = {
     ref: panelRef,
     id: state.panelId
   };
   var passthroughProps = props;
-  return render({
+  return React__default.createElement(DisclosurePanelContext.Provider, {
+    value: state.panelId
+  }, render({
     props: _extends({}, passthroughProps, propsWeControl),
     slot: slot,
     defaultTag: DEFAULT_PANEL_TAG,
     features: PanelRenderFeatures,
     visible: visible,
     name: 'Disclosure.Panel'
-  });
+  }));
 }); // ---
 
 Disclosure.Button = Button;
@@ -1790,12 +1880,13 @@ var ActionTypes$2;
   ActionTypes[ActionTypes["OpenListbox"] = 0] = "OpenListbox";
   ActionTypes[ActionTypes["CloseListbox"] = 1] = "CloseListbox";
   ActionTypes[ActionTypes["SetDisabled"] = 2] = "SetDisabled";
-  ActionTypes[ActionTypes["GoToOption"] = 3] = "GoToOption";
-  ActionTypes[ActionTypes["Search"] = 4] = "Search";
-  ActionTypes[ActionTypes["ClearSearch"] = 5] = "ClearSearch";
-  ActionTypes[ActionTypes["RegisterOption"] = 6] = "RegisterOption";
-  ActionTypes[ActionTypes["UnregisterOption"] = 7] = "UnregisterOption";
-  ActionTypes[ActionTypes["ChangeValue"] = 8] = "ChangeValue";
+  ActionTypes[ActionTypes["SetOrientation"] = 3] = "SetOrientation";
+  ActionTypes[ActionTypes["GoToOption"] = 4] = "GoToOption";
+  ActionTypes[ActionTypes["Search"] = 5] = "Search";
+  ActionTypes[ActionTypes["ClearSearch"] = 6] = "ClearSearch";
+  ActionTypes[ActionTypes["RegisterOption"] = 7] = "RegisterOption";
+  ActionTypes[ActionTypes["UnregisterOption"] = 8] = "UnregisterOption";
+  ActionTypes[ActionTypes["ChangeValue"] = 9] = "ChangeValue";
 })(ActionTypes$2 || (ActionTypes$2 = {}));
 
 var reducers$2 = (_reducers$2 = {}, _reducers$2[ActionTypes$2.CloseListbox] = function (state) {
@@ -1815,6 +1906,11 @@ var reducers$2 = (_reducers$2 = {}, _reducers$2[ActionTypes$2.CloseListbox] = fu
   if (state.disabled === action.disabled) return state;
   return _extends({}, state, {
     disabled: action.disabled
+  });
+}, _reducers$2[ActionTypes$2.SetOrientation] = function (state, action) {
+  if (state.orientation === action.orientation) return state;
+  return _extends({}, state, {
+    orientation: action.orientation
   });
 }, _reducers$2[ActionTypes$2.GoToOption] = function (state, action) {
   if (state.disabled) return state;
@@ -1918,8 +2014,11 @@ function Listbox(props) {
       _onChange = props.onChange,
       _props$disabled = props.disabled,
       disabled = _props$disabled === void 0 ? false : _props$disabled,
-      passThroughProps = _objectWithoutPropertiesLoose(props, ["value", "onChange", "disabled"]); // Handle value change for single and multiple values
+      _props$horizontal = props.horizontal,
+      horizontal = _props$horizontal === void 0 ? false : _props$horizontal,
+      passThroughProps = _objectWithoutPropertiesLoose(props, ["value", "onChange", "disabled", "horizontal"]);
 
+  var orientation = horizontal ? 'horizontal' : 'vertical'; // Handle value change for single and multiple values
 
   var onChange = React.useCallback(function (changedOption) {
     var newValue = Array.isArray(value) ? value.includes(changedOption) ? value.filter(function (option) {
@@ -1941,6 +2040,7 @@ function Listbox(props) {
     buttonRef: React.createRef(),
     optionsRef: React.createRef(),
     disabled: disabled,
+    orientation: orientation,
     options: [],
     searchQuery: '',
     activeOptionIndex: null
@@ -1965,7 +2065,13 @@ function Listbox(props) {
       type: ActionTypes$2.SetDisabled,
       disabled: disabled
     });
-  }, [disabled]); // Handle outside click
+  }, [disabled]);
+  useIsoMorphicEffect(function () {
+    return dispatch({
+      type: ActionTypes$2.SetOrientation,
+      orientation: orientation
+    });
+  }, [orientation]); // Handle outside click
 
   useWindowEvent('mousedown', function (event) {
     var _buttonRef$current, _optionsRef$current;
@@ -2223,7 +2329,10 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
 
         break;
 
-      case Keys.ArrowDown:
+      case match(state.orientation, {
+        vertical: Keys.ArrowDown,
+        horizontal: Keys.ArrowRight
+      }):
         event.preventDefault();
         event.stopPropagation();
         return dispatch({
@@ -2231,7 +2340,10 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
           focus: Focus$1.Next
         });
 
-      case Keys.ArrowUp:
+      case match(state.orientation, {
+        vertical: Keys.ArrowUp,
+        horizontal: Keys.ArrowLeft
+      }):
         event.preventDefault();
         event.stopPropagation();
         return dispatch({
@@ -2305,6 +2417,7 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
   var propsWeControl = {
     'aria-activedescendant': state.activeOptionIndex === null ? undefined : (_state$options$state$ = state.options[state.activeOptionIndex]) == null ? void 0 : _state$options$state$.id,
     'aria-labelledby': labelledby,
+    'aria-orientation': state.orientation,
     id: id,
     onKeyDown: handleKeyDown,
     role: 'listbox',
@@ -3158,6 +3271,21 @@ function usePopoverContext(component) {
   return context;
 }
 
+var PopoverAPIContext = /*#__PURE__*/React.createContext(null);
+PopoverAPIContext.displayName = 'PopoverAPIContext';
+
+function usePopoverAPIContext(component) {
+  var context = React.useContext(PopoverAPIContext);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <" + Popover.name + " /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, usePopoverAPIContext);
+    throw err;
+  }
+
+  return context;
+}
+
 var PopoverGroupContext = /*#__PURE__*/React.createContext(null);
 PopoverGroupContext.displayName = 'PopoverGroupContext';
 
@@ -3253,13 +3381,35 @@ function Popover(props) {
       button == null ? void 0 : button.focus();
     }
   });
+  var close = React.useCallback(function (focusableElement) {
+    dispatch({
+      type: ActionTypes$4.ClosePopover
+    });
+
+    var restoreElement = function () {
+      if (!focusableElement) return button;
+      if (focusableElement instanceof HTMLElement) return focusableElement;
+      if (focusableElement.current instanceof HTMLElement) return focusableElement.current;
+      return button;
+    }();
+
+    restoreElement == null ? void 0 : restoreElement.focus();
+  }, [dispatch, button]);
+  var api = React.useMemo(function () {
+    return {
+      close: close
+    };
+  }, [close]);
   var slot = React.useMemo(function () {
     return {
-      open: popoverState === PopoverStates.Open
+      open: popoverState === PopoverStates.Open,
+      close: close
     };
-  }, [popoverState]);
+  }, [popoverState, close]);
   return React__default.createElement(PopoverContext.Provider, {
     value: reducerBag
+  }, React__default.createElement(PopoverAPIContext.Provider, {
+    value: api
   }, React__default.createElement(OpenClosedProvider, {
     value: match(popoverState, (_match2 = {}, _match2[PopoverStates.Open] = State.Open, _match2[PopoverStates.Closed] = State.Closed, _match2))
   }, render({
@@ -3267,7 +3417,7 @@ function Popover(props) {
     slot: slot,
     defaultTag: DEFAULT_POPOVER_TAG,
     name: 'Popover'
-  })));
+  }))));
 } // ---
 
 var DEFAULT_BUTTON_TAG$3 = 'button';
@@ -3505,6 +3655,9 @@ var Panel$1 = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
       state = _usePopoverContext3[0],
       dispatch = _usePopoverContext3[1];
 
+  var _usePopoverAPIContext = usePopoverAPIContext([Popover.name, Panel.name].join('.')),
+      close = _usePopoverAPIContext.close;
+
   var internalPanelRef = React.useRef(null);
   var panelRef = useSyncRefs(internalPanelRef, ref, function (panel) {
     dispatch({
@@ -3622,9 +3775,10 @@ var Panel$1 = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   }, true);
   var slot = React.useMemo(function () {
     return {
-      open: state.popoverState === PopoverStates.Open
+      open: state.popoverState === PopoverStates.Open,
+      close: close
     };
-  }, [state]);
+  }, [state, close]);
   var propsWeControl = {
     ref: panelRef,
     id: state.panelId,
@@ -4265,6 +4419,414 @@ Switch.Group = Group$2;
 Switch.Label = Label$1;
 Switch.Description = Description;
 
+var _reducers$6;
+var ActionTypes$6;
+
+(function (ActionTypes) {
+  ActionTypes[ActionTypes["SetSelectedIndex"] = 0] = "SetSelectedIndex";
+  ActionTypes[ActionTypes["SetOrientation"] = 1] = "SetOrientation";
+  ActionTypes[ActionTypes["SetActivation"] = 2] = "SetActivation";
+  ActionTypes[ActionTypes["RegisterTab"] = 3] = "RegisterTab";
+  ActionTypes[ActionTypes["UnregisterTab"] = 4] = "UnregisterTab";
+  ActionTypes[ActionTypes["RegisterPanel"] = 5] = "RegisterPanel";
+  ActionTypes[ActionTypes["UnregisterPanel"] = 6] = "UnregisterPanel";
+  ActionTypes[ActionTypes["ForceRerender"] = 7] = "ForceRerender";
+})(ActionTypes$6 || (ActionTypes$6 = {}));
+
+var reducers$6 = (_reducers$6 = {}, _reducers$6[ActionTypes$6.SetSelectedIndex] = function (state, action) {
+  if (state.selectedIndex === action.index) return state;
+  return _extends({}, state, {
+    selectedIndex: action.index
+  });
+}, _reducers$6[ActionTypes$6.SetOrientation] = function (state, action) {
+  if (state.orientation === action.orientation) return state;
+  return _extends({}, state, {
+    orientation: action.orientation
+  });
+}, _reducers$6[ActionTypes$6.SetActivation] = function (state, action) {
+  if (state.activation === action.activation) return state;
+  return _extends({}, state, {
+    activation: action.activation
+  });
+}, _reducers$6[ActionTypes$6.RegisterTab] = function (state, action) {
+  if (state.tabs.includes(action.tab)) return state;
+  return _extends({}, state, {
+    tabs: [].concat(state.tabs, [action.tab])
+  });
+}, _reducers$6[ActionTypes$6.UnregisterTab] = function (state, action) {
+  return _extends({}, state, {
+    tabs: state.tabs.filter(function (tab) {
+      return tab !== action.tab;
+    })
+  });
+}, _reducers$6[ActionTypes$6.RegisterPanel] = function (state, action) {
+  if (state.panels.includes(action.panel)) return state;
+  return _extends({}, state, {
+    panels: [].concat(state.panels, [action.panel])
+  });
+}, _reducers$6[ActionTypes$6.UnregisterPanel] = function (state, action) {
+  return _extends({}, state, {
+    panels: state.panels.filter(function (panel) {
+      return panel !== action.panel;
+    })
+  });
+}, _reducers$6[ActionTypes$6.ForceRerender] = function (state) {
+  return _extends({}, state);
+}, _reducers$6);
+var TabsContext = /*#__PURE__*/React.createContext(null);
+TabsContext.displayName = 'TabsContext';
+
+function useTabsContext(component) {
+  var context = React.useContext(TabsContext);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <Tab.Group /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, useTabsContext);
+    throw err;
+  }
+
+  return context;
+}
+
+function stateReducer$6(state, action) {
+  return match(action.type, reducers$6, state, action);
+} // ---
+
+
+var DEFAULT_TABS_TAG = React.Fragment;
+
+function Tabs(props) {
+  var _props$defaultIndex = props.defaultIndex,
+      defaultIndex = _props$defaultIndex === void 0 ? 0 : _props$defaultIndex,
+      _props$vertical = props.vertical,
+      vertical = _props$vertical === void 0 ? false : _props$vertical,
+      _props$manual = props.manual,
+      manual = _props$manual === void 0 ? false : _props$manual,
+      onChange = props.onChange,
+      passThroughProps = _objectWithoutPropertiesLoose(props, ["defaultIndex", "vertical", "manual", "onChange"]);
+
+  var orientation = vertical ? 'vertical' : 'horizontal';
+  var activation = manual ? 'manual' : 'auto';
+
+  var _useReducer = React.useReducer(stateReducer$6, {
+    selectedIndex: null,
+    tabs: [],
+    panels: [],
+    orientation: orientation,
+    activation: activation
+  }),
+      state = _useReducer[0],
+      dispatch = _useReducer[1];
+
+  var slot = React.useMemo(function () {
+    return {
+      selectedIndex: state.selectedIndex
+    };
+  }, [state.selectedIndex]);
+  var onChangeRef = React.useRef(function () {});
+  React.useEffect(function () {
+    dispatch({
+      type: ActionTypes$6.SetOrientation,
+      orientation: orientation
+    });
+  }, [orientation]);
+  React.useEffect(function () {
+    dispatch({
+      type: ActionTypes$6.SetActivation,
+      activation: activation
+    });
+  }, [activation]);
+  React.useEffect(function () {
+    if (typeof onChange === 'function') {
+      onChangeRef.current = onChange;
+    }
+  }, [onChange]);
+  React.useEffect(function () {
+    if (state.tabs.length <= 0) return;
+    if (state.selectedIndex !== null) return;
+    var tabs = state.tabs.map(function (tab) {
+      return tab.current;
+    }).filter(Boolean);
+    var focusableTabs = tabs.filter(function (tab) {
+      return !tab.hasAttribute('disabled');
+    }); // Underflow
+
+    if (defaultIndex < 0) {
+      dispatch({
+        type: ActionTypes$6.SetSelectedIndex,
+        index: tabs.indexOf(focusableTabs[0])
+      });
+    } // Overflow
+    else if (defaultIndex > state.tabs.length) {
+        dispatch({
+          type: ActionTypes$6.SetSelectedIndex,
+          index: tabs.indexOf(focusableTabs[focusableTabs.length - 1])
+        });
+      } // Middle
+      else {
+          var before = tabs.slice(0, defaultIndex);
+          var after = tabs.slice(defaultIndex);
+          var next = [].concat(after, before).find(function (tab) {
+            return focusableTabs.includes(tab);
+          });
+          if (!next) return;
+          dispatch({
+            type: ActionTypes$6.SetSelectedIndex,
+            index: tabs.indexOf(next)
+          });
+        }
+  }, [defaultIndex, state.tabs, state.selectedIndex]);
+  var lastChangedIndex = React.useRef(state.selectedIndex);
+  var providerBag = React.useMemo(function () {
+    return [state, {
+      dispatch: dispatch,
+      change: function change(index) {
+        if (lastChangedIndex.current !== index) onChangeRef.current(index);
+        lastChangedIndex.current = index;
+        dispatch({
+          type: ActionTypes$6.SetSelectedIndex,
+          index: index
+        });
+      }
+    }];
+  }, [state, dispatch]);
+  return React__default.createElement(TabsContext.Provider, {
+    value: providerBag
+  }, render({
+    props: _extends({}, passThroughProps),
+    slot: slot,
+    defaultTag: DEFAULT_TABS_TAG,
+    name: 'Tabs'
+  }));
+} // ---
+
+
+var DEFAULT_LIST_TAG = 'div';
+
+function List(props) {
+  var _useTabsContext = useTabsContext([Tab.name, List.name].join('.')),
+      _useTabsContext$ = _useTabsContext[0],
+      selectedIndex = _useTabsContext$.selectedIndex,
+      orientation = _useTabsContext$.orientation;
+
+  var slot = {
+    selectedIndex: selectedIndex
+  };
+  var propsWeControl = {
+    role: 'tablist',
+    'aria-orientation': orientation
+  };
+  var passThroughProps = props;
+  return render({
+    props: _extends({}, passThroughProps, propsWeControl),
+    slot: slot,
+    defaultTag: DEFAULT_LIST_TAG,
+    name: 'Tabs.List'
+  });
+} // ---
+
+
+var DEFAULT_TAB_TAG = 'button';
+function Tab(props) {
+  var _props$type, _panels$myIndex, _panels$myIndex$curre;
+
+  var id = "headlessui-tabs-tab-" + useId();
+
+  var _useTabsContext2 = useTabsContext(Tab.name),
+      _useTabsContext2$ = _useTabsContext2[0],
+      selectedIndex = _useTabsContext2$.selectedIndex,
+      tabs = _useTabsContext2$.tabs,
+      panels = _useTabsContext2$.panels,
+      orientation = _useTabsContext2$.orientation,
+      activation = _useTabsContext2$.activation,
+      _useTabsContext2$2 = _useTabsContext2[1],
+      dispatch = _useTabsContext2$2.dispatch,
+      change = _useTabsContext2$2.change;
+
+  var internalTabRef = React.useRef(null);
+  var tabRef = useSyncRefs(internalTabRef, function (element) {
+    if (!element) return;
+    dispatch({
+      type: ActionTypes$6.ForceRerender
+    });
+  });
+  useIsoMorphicEffect(function () {
+    dispatch({
+      type: ActionTypes$6.RegisterTab,
+      tab: internalTabRef
+    });
+    return function () {
+      return dispatch({
+        type: ActionTypes$6.UnregisterTab,
+        tab: internalTabRef
+      });
+    };
+  }, [dispatch, internalTabRef]);
+  var myIndex = tabs.indexOf(internalTabRef);
+  var selected = myIndex === selectedIndex;
+  var handleKeyDown = React.useCallback(function (event) {
+    var list = tabs.map(function (tab) {
+      return tab.current;
+    }).filter(Boolean);
+
+    if (event.key === Keys.Space || event.key === Keys.Enter) {
+      event.preventDefault();
+      event.stopPropagation();
+      change(myIndex);
+      return;
+    }
+
+    switch (event.key) {
+      case Keys.Home:
+      case Keys.PageUp:
+        event.preventDefault();
+        event.stopPropagation();
+        return focusIn(list, Focus.First);
+
+      case Keys.End:
+      case Keys.PageDown:
+        event.preventDefault();
+        event.stopPropagation();
+        return focusIn(list, Focus.Last);
+    }
+
+    return match(orientation, {
+      vertical: function vertical() {
+        if (event.key === Keys.ArrowUp) return focusIn(list, Focus.Previous | Focus.WrapAround);
+        if (event.key === Keys.ArrowDown) return focusIn(list, Focus.Next | Focus.WrapAround);
+        return;
+      },
+      horizontal: function horizontal() {
+        if (event.key === Keys.ArrowLeft) return focusIn(list, Focus.Previous | Focus.WrapAround);
+        if (event.key === Keys.ArrowRight) return focusIn(list, Focus.Next | Focus.WrapAround);
+        return;
+      }
+    });
+  }, [tabs, orientation, myIndex, change]);
+  var handleFocus = React.useCallback(function () {
+    var _internalTabRef$curre;
+
+    (_internalTabRef$curre = internalTabRef.current) == null ? void 0 : _internalTabRef$curre.focus();
+  }, [internalTabRef]);
+  var handleSelection = React.useCallback(function () {
+    var _internalTabRef$curre2;
+
+    (_internalTabRef$curre2 = internalTabRef.current) == null ? void 0 : _internalTabRef$curre2.focus();
+    change(myIndex);
+  }, [change, myIndex, internalTabRef]);
+  var type = ((_props$type = props == null ? void 0 : props.type) != null ? _props$type : (props.as || DEFAULT_TAB_TAG) === 'button') ? 'button' : undefined;
+  var slot = React.useMemo(function () {
+    return {
+      selected: selected
+    };
+  }, [selected]);
+  var propsWeControl = {
+    ref: tabRef,
+    onKeyDown: handleKeyDown,
+    onFocus: activation === 'manual' ? handleFocus : handleSelection,
+    onClick: handleSelection,
+    id: id,
+    role: 'tab',
+    type: type,
+    'aria-controls': (_panels$myIndex = panels[myIndex]) == null ? void 0 : (_panels$myIndex$curre = _panels$myIndex.current) == null ? void 0 : _panels$myIndex$curre.id,
+    'aria-selected': selected,
+    tabIndex: selected ? 0 : -1
+  };
+  var passThroughProps = props;
+
+  return render({
+    props: _extends({}, passThroughProps, propsWeControl),
+    slot: slot,
+    defaultTag: DEFAULT_TAB_TAG,
+    name: 'Tabs.Tab'
+  });
+} // ---
+
+var DEFAULT_PANELS_TAG = 'div';
+
+function Panels(props) {
+  var _useTabsContext3 = useTabsContext([Tab.name, Panels.name].join('.')),
+      selectedIndex = _useTabsContext3[0].selectedIndex;
+
+  var slot = React.useMemo(function () {
+    return {
+      selectedIndex: selectedIndex
+    };
+  }, [selectedIndex]);
+  return render({
+    props: props,
+    slot: slot,
+    defaultTag: DEFAULT_PANELS_TAG,
+    name: 'Tabs.Panels'
+  });
+} // ---
+
+
+var DEFAULT_PANEL_TAG$2 = 'div';
+var PanelRenderFeatures$2 = Features.RenderStrategy | Features.Static;
+
+function Panel$2(props) {
+  var _tabs$myIndex, _tabs$myIndex$current;
+
+  var _useTabsContext4 = useTabsContext([Tab.name, Panel$2.name].join('.')),
+      _useTabsContext4$ = _useTabsContext4[0],
+      selectedIndex = _useTabsContext4$.selectedIndex,
+      tabs = _useTabsContext4$.tabs,
+      panels = _useTabsContext4$.panels,
+      dispatch = _useTabsContext4[1].dispatch;
+
+  var id = "headlessui-tabs-panel-" + useId();
+  var internalPanelRef = React.useRef(null);
+  var panelRef = useSyncRefs(internalPanelRef, function (element) {
+    if (!element) return;
+    dispatch({
+      type: ActionTypes$6.ForceRerender
+    });
+  });
+  useIsoMorphicEffect(function () {
+    dispatch({
+      type: ActionTypes$6.RegisterPanel,
+      panel: internalPanelRef
+    });
+    return function () {
+      return dispatch({
+        type: ActionTypes$6.UnregisterPanel,
+        panel: internalPanelRef
+      });
+    };
+  }, [dispatch, internalPanelRef]);
+  var myIndex = panels.indexOf(internalPanelRef);
+  var selected = myIndex === selectedIndex;
+  var slot = React.useMemo(function () {
+    return {
+      selected: selected
+    };
+  }, [selected]);
+  var propsWeControl = {
+    ref: panelRef,
+    id: id,
+    role: 'tabpanel',
+    'aria-labelledby': (_tabs$myIndex = tabs[myIndex]) == null ? void 0 : (_tabs$myIndex$current = _tabs$myIndex.current) == null ? void 0 : _tabs$myIndex$current.id,
+    tabIndex: selected ? 0 : -1
+  };
+
+  var passThroughProps = props;
+  return render({
+    props: _extends({}, passThroughProps, propsWeControl),
+    slot: slot,
+    defaultTag: DEFAULT_PANEL_TAG$2,
+    features: PanelRenderFeatures$2,
+    visible: selected,
+    name: 'Tabs.Panel'
+  });
+} // ---
+
+
+Tab.Group = Tabs;
+Tab.List = List;
+Tab.Panels = Panels;
+Tab.Panel = Panel$2;
+
 function useIsInitialRender() {
   var initial = React.useRef(true);
   React.useEffect(function () {
@@ -4728,5 +5290,6 @@ exports.Popover = Popover;
 exports.Portal = Portal;
 exports.RadioGroup = RadioGroup;
 exports.Switch = Switch;
+exports.Tab = Tab;
 exports.Transition = Transition;
 //# sourceMappingURL=headlessui.cjs.development.js.map

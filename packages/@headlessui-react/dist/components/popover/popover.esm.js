@@ -76,6 +76,21 @@ function usePopoverContext(component) {
   return context;
 }
 
+var PopoverAPIContext = /*#__PURE__*/createContext(null);
+PopoverAPIContext.displayName = 'PopoverAPIContext';
+
+function usePopoverAPIContext(component) {
+  var context = useContext(PopoverAPIContext);
+
+  if (context === null) {
+    var err = new Error("<" + component + " /> is missing a parent <" + Popover.name + " /> component.");
+    if (Error.captureStackTrace) Error.captureStackTrace(err, usePopoverAPIContext);
+    throw err;
+  }
+
+  return context;
+}
+
 var PopoverGroupContext = /*#__PURE__*/createContext(null);
 PopoverGroupContext.displayName = 'PopoverGroupContext';
 
@@ -171,13 +186,35 @@ function Popover(props) {
       button == null ? void 0 : button.focus();
     }
   });
+  var close = useCallback(function (focusableElement) {
+    dispatch({
+      type: ActionTypes.ClosePopover
+    });
+
+    var restoreElement = function () {
+      if (!focusableElement) return button;
+      if (focusableElement instanceof HTMLElement) return focusableElement;
+      if (focusableElement.current instanceof HTMLElement) return focusableElement.current;
+      return button;
+    }();
+
+    restoreElement == null ? void 0 : restoreElement.focus();
+  }, [dispatch, button]);
+  var api = useMemo(function () {
+    return {
+      close: close
+    };
+  }, [close]);
   var slot = useMemo(function () {
     return {
-      open: popoverState === PopoverStates.Open
+      open: popoverState === PopoverStates.Open,
+      close: close
     };
-  }, [popoverState]);
+  }, [popoverState, close]);
   return React.createElement(PopoverContext.Provider, {
     value: reducerBag
+  }, React.createElement(PopoverAPIContext.Provider, {
+    value: api
   }, React.createElement(OpenClosedProvider, {
     value: match(popoverState, (_match2 = {}, _match2[PopoverStates.Open] = State.Open, _match2[PopoverStates.Closed] = State.Closed, _match2))
   }, render({
@@ -185,7 +222,7 @@ function Popover(props) {
     slot: slot,
     defaultTag: DEFAULT_POPOVER_TAG,
     name: 'Popover'
-  })));
+  }))));
 } // ---
 
 var DEFAULT_BUTTON_TAG = 'button';
@@ -423,6 +460,9 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
       state = _usePopoverContext3[0],
       dispatch = _usePopoverContext3[1];
 
+  var _usePopoverAPIContext = usePopoverAPIContext([Popover.name, Panel.name].join('.')),
+      close = _usePopoverAPIContext.close;
+
   var internalPanelRef = useRef(null);
   var panelRef = useSyncRefs(internalPanelRef, ref, function (panel) {
     dispatch({
@@ -540,9 +580,10 @@ var Panel = /*#__PURE__*/forwardRefWithAs(function Panel(props, ref) {
   }, true);
   var slot = useMemo(function () {
     return {
-      open: state.popoverState === PopoverStates.Open
+      open: state.popoverState === PopoverStates.Open,
+      close: close
     };
-  }, [state]);
+  }, [state, close]);
   var propsWeControl = {
     ref: panelRef,
     id: state.panelId,

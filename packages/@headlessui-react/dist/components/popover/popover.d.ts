@@ -1,8 +1,9 @@
-import React, { ElementType } from 'react';
+import React, { ElementType, MutableRefObject } from 'react';
 import { Props } from '../../types';
 declare let DEFAULT_POPOVER_TAG: "div";
 interface PopoverRenderPropArg {
     open: boolean;
+    close(focusableElement?: HTMLElement | MutableRefObject<HTMLElement | null>): void;
 }
 export declare function Popover<TTag extends ElementType = typeof DEFAULT_POPOVER_TAG>(props: Props<TTag, PopoverRenderPropArg>): JSX.Element;
 export declare namespace Popover {
@@ -154,6 +155,7 @@ interface OverlayRenderPropArg {
 }
 interface PanelRenderPropArg {
     open: boolean;
+    close: (focusableElement?: HTMLElement | MutableRefObject<HTMLElement | null>) => void;
 }
 interface GroupRenderPropArg {
 }

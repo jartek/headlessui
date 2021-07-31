@@ -29,12 +29,13 @@ var ActionTypes;
   ActionTypes[ActionTypes["OpenListbox"] = 0] = "OpenListbox";
   ActionTypes[ActionTypes["CloseListbox"] = 1] = "CloseListbox";
   ActionTypes[ActionTypes["SetDisabled"] = 2] = "SetDisabled";
-  ActionTypes[ActionTypes["GoToOption"] = 3] = "GoToOption";
-  ActionTypes[ActionTypes["Search"] = 4] = "Search";
-  ActionTypes[ActionTypes["ClearSearch"] = 5] = "ClearSearch";
-  ActionTypes[ActionTypes["RegisterOption"] = 6] = "RegisterOption";
-  ActionTypes[ActionTypes["UnregisterOption"] = 7] = "UnregisterOption";
-  ActionTypes[ActionTypes["ChangeValue"] = 8] = "ChangeValue";
+  ActionTypes[ActionTypes["SetOrientation"] = 3] = "SetOrientation";
+  ActionTypes[ActionTypes["GoToOption"] = 4] = "GoToOption";
+  ActionTypes[ActionTypes["Search"] = 5] = "Search";
+  ActionTypes[ActionTypes["ClearSearch"] = 6] = "ClearSearch";
+  ActionTypes[ActionTypes["RegisterOption"] = 7] = "RegisterOption";
+  ActionTypes[ActionTypes["UnregisterOption"] = 8] = "UnregisterOption";
+  ActionTypes[ActionTypes["ChangeValue"] = 9] = "ChangeValue";
 })(ActionTypes || (ActionTypes = {}));
 
 var reducers = (_reducers = {}, _reducers[ActionTypes.CloseListbox] = function (state) {
@@ -54,6 +55,11 @@ var reducers = (_reducers = {}, _reducers[ActionTypes.CloseListbox] = function (
   if (state.disabled === action.disabled) return state;
   return _extends({}, state, {
     disabled: action.disabled
+  });
+}, _reducers[ActionTypes.SetOrientation] = function (state, action) {
+  if (state.orientation === action.orientation) return state;
+  return _extends({}, state, {
+    orientation: action.orientation
   });
 }, _reducers[ActionTypes.GoToOption] = function (state, action) {
   if (state.disabled) return state;
@@ -157,8 +163,11 @@ function Listbox(props) {
       _onChange = props.onChange,
       _props$disabled = props.disabled,
       disabled = _props$disabled === void 0 ? false : _props$disabled,
-      passThroughProps = _objectWithoutPropertiesLoose(props, ["value", "onChange", "disabled"]); // Handle value change for single and multiple values
+      _props$horizontal = props.horizontal,
+      horizontal = _props$horizontal === void 0 ? false : _props$horizontal,
+      passThroughProps = _objectWithoutPropertiesLoose(props, ["value", "onChange", "disabled", "horizontal"]);
 
+  var orientation = horizontal ? 'horizontal' : 'vertical'; // Handle value change for single and multiple values
 
   var onChange = useCallback(function (changedOption) {
     var newValue = Array.isArray(value) ? value.includes(changedOption) ? value.filter(function (option) {
@@ -180,6 +189,7 @@ function Listbox(props) {
     buttonRef: createRef(),
     optionsRef: createRef(),
     disabled: disabled,
+    orientation: orientation,
     options: [],
     searchQuery: '',
     activeOptionIndex: null
@@ -204,7 +214,13 @@ function Listbox(props) {
       type: ActionTypes.SetDisabled,
       disabled: disabled
     });
-  }, [disabled]); // Handle outside click
+  }, [disabled]);
+  useIsoMorphicEffect(function () {
+    return dispatch({
+      type: ActionTypes.SetOrientation,
+      orientation: orientation
+    });
+  }, [orientation]); // Handle outside click
 
   useWindowEvent('mousedown', function (event) {
     var _buttonRef$current, _optionsRef$current;
@@ -462,7 +478,10 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
 
         break;
 
-      case Keys.ArrowDown:
+      case match(state.orientation, {
+        vertical: Keys.ArrowDown,
+        horizontal: Keys.ArrowRight
+      }):
         event.preventDefault();
         event.stopPropagation();
         return dispatch({
@@ -470,7 +489,10 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
           focus: Focus.Next
         });
 
-      case Keys.ArrowUp:
+      case match(state.orientation, {
+        vertical: Keys.ArrowUp,
+        horizontal: Keys.ArrowLeft
+      }):
         event.preventDefault();
         event.stopPropagation();
         return dispatch({
@@ -544,6 +566,7 @@ var Options = /*#__PURE__*/forwardRefWithAs(function Options(props, ref) {
   var propsWeControl = {
     'aria-activedescendant': state.activeOptionIndex === null ? undefined : (_state$options$state$ = state.options[state.activeOptionIndex]) == null ? void 0 : _state$options$state$.id,
     'aria-labelledby': labelledby,
+    'aria-orientation': state.orientation,
     id: id,
     onKeyDown: handleKeyDown,
     role: 'listbox',
